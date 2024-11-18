@@ -1,12 +1,12 @@
-{ writeShellScriptBin
-, coreutils
-, git
-, stow
-, libnotify
-, rsync
-, findutils
+{
+  writeShellScriptBin,
+  coreutils,
+  git,
+  stow,
+  libnotify,
+  rsync,
+  findutils,
 }:
-
 writeShellScriptBin "dotfiles-sync" ''
   set -e
 
@@ -25,101 +25,50 @@ writeShellScriptBin "dotfiles-sync" ''
   echo "Temporary file: $TEMP_FILE"
   echo "Failure log file: $FAILURE_LOG"
 
-  # Initialize/check git repository
-  init_git_repo() {
-      echo "Checking git repository setup..." | tee -a "$TEMP_FILE"
-
-      # Create directory if it doesn't exist
-      if [ ! -d "$DOTFILES_PATH" ]; then
-          echo "Creating dotfiles directory..." | tee -a "$TEMP_FILE"
-          mkdir -p "$DOTFILES_PATH"
-      fi
-
-      # Change to the dotfiles directory
-      cd "$DOTFILES_PATH"
-
-      # Initialize git if needed
-      if [ ! -d "$DOTFILES_PATH/.git" ]; then
-          echo "Initializing new git repository..." | tee -a "$TEMP_FILE"
-          git init
-          # Make sure it's a safe directory right after initialization
-          git config --global --add safe.directory "$DOTFILES_PATH"
-          # Create main branch and set it as default
-          git checkout -b main
-      else
-          # Make sure it's a safe directory
-          git config --global --add safe.directory "$DOTFILES_PATH"
-      fi
-
-      # Check for remote only if we have a git repository
-      if [ -d "$DOTFILES_PATH/.git" ]; then
-          if ! git remote get-url origin >/dev/null 2>&1; then
-              echo "Setting up remote repository..." | tee -a "$TEMP_FILE"
-              git remote add origin "git@github.com:kedwar83/.dotfiles.git"
-          fi
-
-          # Try to fetch only if we have a remote configured
-          if git remote -v | grep -q origin; then
-              echo "Fetching from remote..." | tee -a "$TEMP_FILE"
-              git fetch origin || true
-          fi
-
-          # Ensure we're on the main branch
-          if ! git rev-parse --verify main >/dev/null 2>&1; then
-              echo "Creating main branch..." | tee -a "$TEMP_FILE"
-              git checkout -b main
-          else
-              echo "Checking out main branch..." | tee -a "$TEMP_FILE"
-              git checkout main || git checkout -b main
-          fi
-      fi
-  }
-
   copy_dotfiles() {
       echo "Copying dotfiles to repository..." | tee -a "$TEMP_FILE"
 
-${rsync}/bin/rsync -av --no-links --ignore-missing-args \
-     --exclude=".Xauthority" \
-  --exclude=".xsession-errors" \
-  --exclude=".bash_history" \
-  --exclude=".ssh" \
-  --exclude=".gnupg" \
-  --exclude=".pki" \
-  --exclude=".cache" \
-  --exclude=".compose-cache" \
-  --exclude=".local/share/Trash/" \
-  --exclude="*/recently-used.xbel" \
-  --exclude=".steam" \
-  --exclude=".local/share/Steam" \
-  --exclude=".local/share/Rocket League/" \
-  --exclude=".nix-profile" \
-  --exclude=".nix-defexpr" \
---exclude=".local/share/dolphin/view_properties" \
---exclude=".local/share/nicotine/downloads/" \
---exclude=".local/share/GOG.com/" \
-  --exclude=".dotfiles" \
-  --exclude=".local/state/nix/profiles" \
-  --exclude=".nixos-config" \
-  --exclude=".system_setup_complete" \
-  --exclude=".mozilla" \
-  --exclude=".config/BraveSoftware/" \
-   --exclude=".config/Mullvad VPN" \
-   --exclude=".config/StardewValley/" \
-  --exclude=".config/Signal Beta/" \
-  --exclude=".config/session/" \
-  --exclude=".config/Joplin/" \
-  --exclude=".config/joplin-desktop" \
-  --exclude=".config/VSCodium/" \
-  --exclude=".dbus" \
-  --exclude=".ollama" \
-  --exclude=".pulse-cookie" \
-  --exclude=".xsession-errors.old" \
-  --include="*/" \
-  --include=".*" \
-  --exclude="*" \
-  "$HOME/" "$HOME/.dotfiles/"
+      ${rsync}/bin/rsync -av --no-links --ignore-missing-args \
+          --exclude=".Xauthority" \
+          --exclude=".xsession-errors" \
+          --exclude=".bash_history" \
+          --exclude=".ssh" \
+          --exclude=".gnupg" \
+          --exclude=".pki" \
+          --exclude=".cache" \
+          --exclude=".compose-cache" \
+          --exclude=".local/share/Trash/" \
+          --exclude="*/recently-used.xbel" \
+          --exclude=".steam" \
+          --exclude=".local/share/Steam" \
+          --exclude=".local/share/Rocket League/" \
+          --exclude=".nix-profile" \
+          --exclude=".nix-defexpr" \
+          --exclude=".local/share/dolphin/view_properties" \
+          --exclude=".local/share/nicotine/downloads/" \
+          --exclude=".local/share/GOG.com/" \
+          --exclude=".dotfiles" \
+          --exclude=".local/state/nix/profiles" \
+          --exclude=".nixos-config" \
+          --exclude=".system_setup_complete" \
+          --exclude=".mozilla" \
+          --exclude=".config/BraveSoftware/" \
+          --exclude=".config/Mullvad VPN" \
+          --exclude=".config/StardewValley/" \
+          --exclude=".config/Signal Beta/" \
+          --exclude=".config/session/" \
+          --exclude=".config/Joplin/" \
+          --exclude=".config/joplin-desktop" \
+          --exclude=".config/VSCodium/" \
+          --exclude=".dbus" \
+          --exclude=".ollama" \
+          --exclude=".pulse-cookie" \
+          --exclude=".xsession-errors.old" \
+          --include=".*" \
+          --include=".*/**" \
+          --exclude="*" \
+          "$HOME/" "$HOME/.dotfiles/"
 
-      # Define files to copy with relative paths from home directory
       local -a files=(
           ".mozilla/firefox/*/chrome/userChrome.css"
           ".mozilla/firefox/*/chrome/userContent.css"
@@ -171,16 +120,9 @@ ${rsync}/bin/rsync -av --no-links --ignore-missing-args \
       done
   }
 
-  # Main script execution
-  if [ ! -f "$SETUP_FLAG" ]; then
-      echo "First-time setup detected..." | tee -a "$TEMP_FILE"
-      mkdir -p "$DOTFILES_PATH"
-      init_git_repo
-  else
-      copy_dotfiles
-  fi
+  # Call the copy_dotfiles function
+  copy_dotfiles
 
-  # Stow all dotfiles and capture the result
   echo "Stowing dotfiles..." | tee -a "$TEMP_FILE"
   if ${stow}/bin/stow -vR --adopt . -d "$DOTFILES_PATH" -t "$ACTUAL_HOME" 2> >(tee -a "$FAILURE_LOG" >&2); then
       STOW_SUCCESS=1
@@ -189,11 +131,11 @@ ${rsync}/bin/rsync -av --no-links --ignore-missing-args \
       DBUS_SESSION_BUS_ADDRESS="unix:path=/run/user/$(id -u)/bus" ${libnotify}/bin/notify-send "Stow Failure" "Some dotfiles could not be stowed. Check the failure log at: $FAILURE_LOG" --icon=dialog-error
   fi
 
-  # Git operations only if stow was successful
   if [ $STOW_SUCCESS -eq 1 ]; then
       cd "$DOTFILES_PATH"
 
-      if ! git diff --quiet || ! git ls-files --others --exclude-standard --quiet; then
+      # Fixed git status check
+      if [ -n "$(git status --porcelain)" ]; then
           echo "Changes detected, committing..." | tee -a "$TEMP_FILE"
           git add .
           git commit -m "Updated dotfiles: $(date '+%Y-%m-%d %H:%M:%S')"
