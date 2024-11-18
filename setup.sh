@@ -1,10 +1,12 @@
 #!/usr/bin/env bash
 set -e
 
-#TODO this is missing the portion about dotfiles and home-manager
 ACTUAL_USER=${SUDO_USER:-$USER}
+ACTUAL_HOME="/home/$ACTUAL_USER"
 NIXOS_CONFIG_DIR="/etc/nixos"
 GIT_REPO_URL="git@github.com:kedwar83/nixos-config.git"
+DOTFILES_REPO_URL="git@github.com:kedwar83/.dotfiles.git"
+DOTFILES_PATH="$ACTUAL_HOME/.dotfiles"
 USER_EMAIL="keganedwards@proton.me"
 SSH_KEY_FILE="/home/$ACTUAL_USER/.ssh/id_ed25519"
 
@@ -101,11 +103,61 @@ EOL
     echo "LUKS and boot configuration successfully written to $boot_config_file"
 }
 
+# Initialize/check git repository for dotfiles
+init_git_repo() {
+    echo "Checking dotfiles git repository setup..."
+    # Create directory if it doesn't exist
+    if [ ! -d "$DOTFILES_PATH" ]; then
+        echo "Creating dotfiles directory..."
+        sudo -u $ACTUAL_USER mkdir -p "$DOTFILES_PATH"
+    fi
+    # Change to the dotfiles directory
+    cd "$DOTFILES_PATH"
+    # Initialize git if needed
+    if [ ! -d "$DOTFILES_PATH/.git" ]; then
+        echo "Initializing new git repository..."
+        sudo -u $ACTUAL_USER git init
+        # Make sure it's a safe directory right after initialization
+        sudo -u $ACTUAL_USER git config --global --add safe.directory "$DOTFILES_PATH"
+        # Create main branch and set it as default
+        sudo -u $ACTUAL_USER git checkout -b main
+    else
+        # Make sure it's a safe directory
+        sudo -u $ACTUAL_USER git config --global --add safe.directory "$DOTFILES_PATH"
+    fi
+    # Check for remote only if we have a git repository
+    if [ -d "$DOTFILES_PATH/.git" ]; then
+        if ! sudo -u $ACTUAL_USER git remote get-url origin >/dev/null 2>&1; then
+            echo "Setting up remote repository..."
+            sudo -u $ACTUAL_USER git remote add origin "$DOTFILES_REPO_URL"
+        fi
+        # Try to fetch only if we have a remote configured
+        if sudo -u $ACTUAL_USER git remote -v | grep -q origin; then
+            echo "Fetching from remote..."
+            sudo -u $ACTUAL_USER git fetch origin || true
+        fi
+        # Ensure we're on the main branch
+        if ! sudo -u $ACTUAL_USER git rev-parse --verify main >/dev/null 2>&1; then
+            echo "Creating main branch..."
+            sudo -u $ACTUAL_USER git checkout -b main
+        else
+            echo "Checking out main branch..."
+            sudo -u $ACTUAL_USER git checkout main || sudo -u $ACTUAL_USER git checkout -b main
+        fi
+        # Clone the actual repo contents
+        sudo -u $ACTUAL_USER git clone "$DOTFILES_REPO_URL" "$DOTFILES_PATH"
+    fi
+}
+
 # Main setup function
 echo "First-time setup detected..."
 
 # Setup git
 setup_git "$NIXOS_CONFIG_DIR"
+
+# Chown the config directory to the actual user
+echo "Changing ownership of $NIXOS_CONFIG_DIR to $ACTUAL_USER..."
+chown -R "$ACTUAL_USER:users" "$NIXOS_CONFIG_DIR"
 
 # Clone the repository
 echo "Cloning NixOS configuration repository..."
@@ -134,10 +186,20 @@ read -p "Press Enter after you've finished editing the configuration files..."
 
 # Rebuild NixOS with flake
 echo "Rebuilding NixOS..."
-if nixos-rebuild switch --flake "/etc/nixos#${hostname}" 2>&1 | tee "$NIXOS_CONFIG_DIR/nixos-switch.log"; then
-    echo "First-time setup complete!"
-else
-    echo "NixOS rebuild failed during setup!"
-    cat "$NIXOS_CONFIG_DIR/nixos-switch.log" | grep --color error
-    exit 1
-fi
+nixos-rebuild switch --flake "/etc/nixos#${hostname}"
+
+# Clone dotfiles repository
+echo "Setting up dotfiles repository..."
+init_git_repo
+
+# Setup home-manager
+echo "Setting up home-manager..."
+nix-channel --add https://github.com/nix-community/home-manager/archive/master.tar.gz home-manager
+nix-channel --update
+nix-shell '<home-manager>' -A install
+
+# Stow the dotfiles forcefully
+echo "Stowing dotfiles..."
+sudo -u $ACTUAL_USER nix-shell -p stow --run "stow -vR --adopt . -d '$DOTFILES_PATH' -t '$ACTUAL_HOME' 2>"
+
+echo "First-time setup and home-manager installation complete!"
