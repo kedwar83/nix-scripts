@@ -1,3 +1,5 @@
+#TODO the setup works except that it copies in the boot device name wrong atm. 
+
 #!/usr/bin/env bash
 set -e
 
@@ -61,47 +63,66 @@ setup_git() {
         sudo -u $ACTUAL_USER git -C "$config_dir" remote add origin "$GIT_REPO_URL"
     fi
 }
-
 generate_luks_config() {
     local hostname="$1"
     local boot_config_file="$NIXOS_CONFIG_DIR/hosts/$hostname/boot.nix"
-    local boot_device=$(findmnt -n -o SOURCE /boot | grep -o '/dev/nvme[0-9]n[0-9]')
+
+    # Detect boot device using 'mount' and 'awk'
+    boot_device=$(sudo -u $ACTUAL_USER mount | grep '/boot' | awk '{print $1}' | sed -E 's|^(/dev/)?|\1|; s/[0-9]+$//')
+
+    # Ensure boot_device is not empty
+    if [ -z "$boot_device" ]; then
+        echo "Error: Could not determine the boot device." >&2
+        exit 1
+    fi
+    boot_device="/dev/$boot_device"
+
+    echo "Detected boot device: $boot_device"
+
+    # Detect LUKS UUIDs
     local luks_uuids=($(blkid | grep "TYPE=\"crypto_LUKS\"" | grep -o "UUID=\"[^\"]*\"" | cut -d'"' -f2))
 
     # Create the boot configuration file
     cat > "$boot_config_file" << EOL
-{ config, pkgs, ... }:
-
 {
-  boot.loader.grub.enable = true;
-  boot.loader.grub.device = "${boot_device}";
-  boot.loader.grub.useOSProber = true;
-  boot.loader.grub.enableCryptodisk = true;
-
-  boot.initrd.luks.devices = {
+  config,
+  pkgs,
+  ...
+}: {
+  boot = {
+    loader = {
+      grub.enable = true;
+      grub.device = "$boot_device";
+      grub.useOSProber = true;
+      grub.enableCryptodisk = true;
+    };
+    initrd = {
+      luks.devices = {
 EOL
 
     # Add LUKS device information for each UUID
     for uuid in "${luks_uuids[@]}"; do
         cat >> "$boot_config_file" << EOL
-    "luks-${uuid}" = {
-      device = "/dev/disk/by-uuid/${uuid}";
-      keyFile = "/boot/crypto_keyfile.bin";
-    };
+        "luks-${uuid}" = {
+          device = "/dev/disk/by-uuid/${uuid}";
+          keyFile = "/boot/crypto_keyfile.bin";
+        };
 EOL
     done
 
     cat >> "$boot_config_file" << EOL
-  };
-
-  boot.secrets = {
-    "/boot/crypto_keyfile.bin" = null;
+      };
+      secrets = {
+        "/boot/crypto_keyfile.bin" = null;
+      };
+    };
   };
 }
 EOL
 
     echo "LUKS and boot configuration successfully written to $boot_config_file"
 }
+
 
 # Initialize/check git repository for dotfiles
 init_git_repo() {
@@ -152,12 +173,12 @@ init_git_repo() {
 # Main setup function
 echo "First-time setup detected..."
 
-# Setup git
-setup_git "$NIXOS_CONFIG_DIR"
-
-# Chown the config directory to the actual user
+# Chown the config directory to the actual user BEFORE git operations
 echo "Changing ownership of $NIXOS_CONFIG_DIR to $ACTUAL_USER..."
 chown -R "$ACTUAL_USER:users" "$NIXOS_CONFIG_DIR"
+
+# Setup git
+setup_git "$NIXOS_CONFIG_DIR"
 
 # Clone the repository
 echo "Cloning NixOS configuration repository..."
@@ -166,9 +187,12 @@ sudo -u $ACTUAL_USER nix-shell -p git --run "git clone '$GIT_REPO_URL' '$NIXOS_C
 # Get hostname from user
 read -p "Please enter the hostname for this machine: " hostname
 
+echo "Creating host configuration directory..."
+mkdir -p "$NIXOS_CONFIG_DIR/hosts/$hostname"
+
 # Create new host directory structure by copying from desktop
 echo "Creating new host configuration structure..."
-cp -r "$NIXOS_CONFIG_DIR/hosts/desktop" "$NIXOS_CONFIG_DIR/hosts/$hostname"
+cp -r "$NIXOS_CONFIG_DIR/hosts/desktop/"* "$NIXOS_CONFIG_DIR/hosts/$hostname/"
 
 # Generate LUKS configuration and overwrite boot.nix
 echo "Generating LUKS configuration..."
@@ -176,13 +200,25 @@ generate_luks_config "$hostname"
 
 # Copy hardware configuration from /etc/nixos and overwrite the existing one
 echo "Copying hardware configuration..."
-cp "/etc/nixos/hardware-configuration.nix" "$NIXOS_CONFIG_DIR/hosts/$hostname/hardware-configuration.nix"
+mv "/etc/nixos/hardware-configuration.nix" "$NIXOS_CONFIG_DIR/hosts/$hostname/hardware-configuration.nix"
+
+# Remove existing configuration files in /etc/nixos
+echo "Removing existing NixOS configuration files..."
+rm -f /etc/nixos/configuration.nix
 
 # Prompt user to edit configuration files
 echo "Please edit the following configuration files for your new host:"
 echo "1. $NIXOS_CONFIG_DIR/hosts/$hostname/configuration.nix"
-echo "2. $NIXOS_CONFIG_DIR/hosts/$hostname/home.nix"
+echo "2. $NIXOS_CONFIG_DIR/flake.nix"
 read -p "Press Enter after you've finished editing the configuration files..."
+
+# Stage all files in the git repository
+echo "Staging all files in the repository..."
+sudo -u $ACTUAL_USER git -C "$NIXOS_CONFIG_DIR" add .
+
+# Optional: Commit the changes
+echo "Committing changes..."
+sudo -u $ACTUAL_USER git -C "$NIXOS_CONFIG_DIR" commit -m "Initial NixOS configuration for $hostname"
 
 # Rebuild NixOS with flake
 echo "Rebuilding NixOS..."
