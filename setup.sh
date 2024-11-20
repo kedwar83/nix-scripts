@@ -1,5 +1,3 @@
-#TODO the setup works except that it copies in the boot device name wrong atm. 
-
 #!/usr/bin/env bash
 set -e
 
@@ -105,8 +103,10 @@ init_git_repo() {
         echo "Creating dotfiles directory..."
         sudo -u $ACTUAL_USER mkdir -p "$DOTFILES_PATH"
     fi
+
     # Change to the dotfiles directory
     cd "$DOTFILES_PATH"
+
     # Initialize git if needed
     if [ ! -d "$DOTFILES_PATH/.git" ]; then
         echo "Initializing new git repository..."
@@ -119,17 +119,20 @@ init_git_repo() {
         # Make sure it's a safe directory
         sudo -u $ACTUAL_USER git config --global --add safe.directory "$DOTFILES_PATH"
     fi
+
     # Check for remote only if we have a git repository
     if [ -d "$DOTFILES_PATH/.git" ]; then
         if ! sudo -u $ACTUAL_USER git remote get-url origin >/dev/null 2>&1; then
             echo "Setting up remote repository..."
             sudo -u $ACTUAL_USER git remote add origin "$DOTFILES_REPO_URL"
         fi
+
         # Try to fetch only if we have a remote configured
         if sudo -u $ACTUAL_USER git remote -v | grep -q origin; then
             echo "Fetching from remote..."
             sudo -u $ACTUAL_USER git fetch origin || true
         fi
+
         # Ensure we're on the main branch
         if ! sudo -u $ACTUAL_USER git rev-parse --verify main >/dev/null 2>&1; then
             echo "Creating main branch..."
@@ -138,8 +141,10 @@ init_git_repo() {
             echo "Checking out main branch..."
             sudo -u $ACTUAL_USER git checkout main || sudo -u $ACTUAL_USER git checkout -b main
         fi
-        # Clone the actual repo contents
-        sudo -u $ACTUAL_USER git clone "$DOTFILES_REPO_URL" "$DOTFILES_PATH"
+
+        # Remove the clone operation and instead pull the latest content
+        echo "Pulling latest dotfiles..."
+        sudo -u $ACTUAL_USER git -C "$DOTFILES_PATH" pull origin main
     fi
 }
 
