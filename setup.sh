@@ -65,24 +65,13 @@ setup_git() {
 }
 generate_luks_config() {
     local hostname="$1"
+    local config_file="/etc/nixos/configuration.nix"
     local boot_config_file="$NIXOS_CONFIG_DIR/hosts/$hostname/boot.nix"
 
     # Detect boot device using 'mount' and 'awk'
     boot_device=$(sudo -u $ACTUAL_USER mount | grep '/boot' | awk '{print $1}' | sed -E 's|^(/dev/)?|\1|; s/[0-9]+$//' | sed 's|^/dev/||')
 
-    # Ensure boot_device is not empty
-    if [ -z "$boot_device" ]; then
-        echo "Error: Could not determine the boot device." >&2
-        exit 1
-    fi
-    boot_device="/dev/$boot_device"
-
-    echo "Detected boot device: $boot_device"
-
-    # Detect LUKS UUIDs
-    local luks_uuids=($(blkid | grep "TYPE=\"crypto_LUKS\"" | grep -o "UUID=\"[^\"]*\"" | cut -d'"' -f2))
-
-    # Create the boot configuration file
+    # Create the boot configuration file with the basic structure
     cat > "$boot_config_file" << EOL
 {
   config,
@@ -90,35 +79,25 @@ generate_luks_config() {
   ...
 }: {
   boot = {
-    loader = {
-      grub.enable = true;
-      grub.device = "$boot_device";
-      grub.useOSProber = true;
-      grub.enableCryptodisk = true;
-    };
-    initrd = {
-      luks.devices = {
 EOL
 
-    # Add LUKS device information for each UUID
-    for uuid in "${luks_uuids[@]}"; do
-        cat >> "$boot_config_file" << EOL
-        "luks-${uuid}" = {
-          device = "/dev/disk/by-uuid/${uuid}";
-        };
-EOL
-    done
+    # Extract boot-related lines from configuration.nix
+    while IFS= read -r line; do
+        # Trim leading/trailing whitespace
+        trimmed_line=$(echo "$line" | xargs)
+        
+        # Check if line starts with boot. or contains boot.
+        if [[ "$trimmed_line" =~ ^boot\. || "$trimmed_line" =~ boot\. ]]; then
+            echo "    $trimmed_line" >> "$boot_config_file"
+        fi
+    done < "$config_file"
 
-    cat >> "$boot_config_file" << EOL
-      };
-    };
-  };
+    # Close the boot and top-level blocks
+    echo "  };" >> "$boot_config_file"
+    echo "}" >> "$boot_config_file"
+
+    echo "Boot configuration successfully written to $boot_config_file"
 }
-EOL
-
-    echo "LUKS and boot configuration successfully written to $boot_config_file"
-}
-
 
 # Initialize/check git repository for dotfiles
 init_git_repo() {
