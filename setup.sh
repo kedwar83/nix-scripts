@@ -105,15 +105,11 @@ EOL
         cat >> "$boot_config_file" << EOL
         "luks-${uuid}" = {
           device = "/dev/disk/by-uuid/${uuid}";
-          keyFile = "/boot/crypto_keyfile.bin";
         };
 EOL
     done
 
     cat >> "$boot_config_file" << EOL
-      };
-      secrets = {
-        "/boot/crypto_keyfile.bin" = null;
       };
     };
   };
