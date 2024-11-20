@@ -84,8 +84,8 @@ EOL
     # Extract boot-related lines from configuration.nix
     while IFS= read -r line; do
         # Trim leading/trailing whitespace
-        trimmed_line=$(echo "$line" | xargs)
-        
+        trimmed_line=$(echo "$line" | sed -e 's/^[[:space:]]*//' -e 's/[[:space:]]*$//')
+
         # Check if line starts with boot. or contains boot.
         if [[ "$trimmed_line" =~ ^boot\. || "$trimmed_line" =~ boot\. ]]; then
             echo "    $trimmed_line" >> "$boot_config_file"
