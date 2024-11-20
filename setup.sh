@@ -68,7 +68,7 @@ generate_luks_config() {
     local boot_config_file="$NIXOS_CONFIG_DIR/hosts/$hostname/boot.nix"
 
     # Detect boot device using 'mount' and 'awk'
-    boot_device=$(sudo -u $ACTUAL_USER mount | grep '/boot' | awk '{print $1}' | sed -E 's|^(/dev/)?|\1|; s/[0-9]+$//')
+    boot_device=$(sudo -u $ACTUAL_USER mount | grep '/boot' | awk '{print $1}' | sed -E 's|^(/dev/)?|\1|; s/[0-9]+$//' | sed 's|^/dev/||')
 
     # Ensure boot_device is not empty
     if [ -z "$boot_device" ]; then
