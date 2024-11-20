@@ -71,14 +71,13 @@ generate_luks_config() {
     # Detect boot device using 'mount' and 'awk'
     boot_device=$(sudo -u $ACTUAL_USER mount | grep '/boot' | awk '{print $1}' | sed -E 's|^(/dev/)?|\1|; s/[0-9]+$//' | sed 's|^/dev/||')
 
-    # Create the boot configuration file with the basic structure
+    # Create the boot configuration file with a simple structure
     cat > "$boot_config_file" << EOL
 {
   config,
   pkgs,
   ...
 }: {
-  boot = {
 EOL
 
     # Extract boot-related lines from configuration.nix
@@ -86,14 +85,13 @@ EOL
         # Trim leading/trailing whitespace
         trimmed_line=$(echo "$line" | sed -e 's/^[[:space:]]*//' -e 's/[[:space:]]*$//')
 
-        # Check if line starts with boot. or contains boot.
-        if [[ "$trimmed_line" =~ ^boot\. || "$trimmed_line" =~ boot\. ]]; then
-            echo "    $trimmed_line" >> "$boot_config_file"
+        # Check if line starts with boot.
+        if [[ "$trimmed_line" =~ ^boot\. ]]; then
+            echo "  $trimmed_line" >> "$boot_config_file"
         fi
     done < "$config_file"
 
-    # Close the boot and top-level blocks
-    echo "  };" >> "$boot_config_file"
+    # Close the top-level block
     echo "}" >> "$boot_config_file"
 
     echo "Boot configuration successfully written to $boot_config_file"
