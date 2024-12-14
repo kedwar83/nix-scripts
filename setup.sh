@@ -31,19 +31,19 @@ setup_git() {
     # Initialize git repository
     if [ ! -d "$config_dir/.git" ]; then
         echo "Initializing a new git repository in $config_dir..."
-        sudo -u $ACTUAL_USER nix-shell -p git --run "git init '$config_dir'"
+        git init "$config_dir"
     fi
 
-    # Configure git
-    if [ -z "$(sudo -u $ACTUAL_USER git config --global user.email)" ]; then
+    # Configure git globally for root
+    if [ -z "$(git config --global user.email)" ]; then
         echo "Setting git email..."
-        sudo -u $ACTUAL_USER git config --global user.email "$USER_EMAIL"
+        git config --global user.email "$USER_EMAIL"
     fi
 
     # Add safe directory
-    if ! sudo -u $ACTUAL_USER git config --global --get safe.directory | grep -q "^$config_dir$"; then
+    if ! git config --global --get safe.directory | grep -q "^$config_dir$"; then
         echo "Adding $config_dir as a safe directory..."
-        sudo -u $ACTUAL_USER git config --global --add safe.directory "$config_dir"
+        git config --global --add safe.directory "$config_dir"
     fi
 
     # Setup SSH key if needed
@@ -56,11 +56,12 @@ setup_git() {
     fi
 
     # Configure remote
-    if ! sudo -u $ACTUAL_USER git -C "$config_dir" remote get-url origin &> /dev/null; then
+    if ! git -C "$config_dir" remote get-url origin &> /dev/null; then
         echo "No remote repository found. Adding origin remote..."
-        sudo -u $ACTUAL_USER git -C "$config_dir" remote add origin "$GIT_REPO_URL"
+        git -C "$config_dir" remote add origin "$GIT_REPO_URL"
     fi
 }
+
 generate_luks_config() {
     local hostname="$1"
     local config_file="/etc/nixos/configuration.nix"
@@ -151,16 +152,12 @@ init_git_repo() {
 # Main setup function
 echo "First-time setup detected..."
 
-# Chown the config directory to the actual user BEFORE git operations
-echo "Changing ownership of $NIXOS_CONFIG_DIR to $ACTUAL_USER..."
-chown -R "$ACTUAL_USER:users" "$NIXOS_CONFIG_DIR"
-
 # Setup git
 setup_git "$NIXOS_CONFIG_DIR"
 
 # Clone the repository
 echo "Cloning NixOS configuration repository..."
-sudo -u $ACTUAL_USER nix-shell -p git --run "git clone '$GIT_REPO_URL' '$NIXOS_CONFIG_DIR/temp' && cp -r '$NIXOS_CONFIG_DIR/temp/'* '$NIXOS_CONFIG_DIR/' && rm -rf '$NIXOS_CONFIG_DIR/temp'"
+git clone "$GIT_REPO_URL" "$NIXOS_CONFIG_DIR/temp" && cp -r "$NIXOS_CONFIG_DIR/temp/"* "$NIXOS_CONFIG_DIR/" && rm -rf "$NIXOS_CONFIG_DIR/temp"
 
 # Get hostname from user
 read -p "Please enter the hostname for this machine: " hostname
@@ -192,11 +189,11 @@ read -p "Press Enter after you've finished editing the configuration files..."
 
 # Stage all files in the git repository
 echo "Staging all files in the repository..."
-sudo -u $ACTUAL_USER git -C "$NIXOS_CONFIG_DIR" add .
+git -C "$NIXOS_CONFIG_DIR" add .
 
 # Optional: Commit the changes
 echo "Committing changes..."
-sudo -u $ACTUAL_USER git -C "$NIXOS_CONFIG_DIR" commit -m "Initial NixOS configuration for $hostname"
+git -C "$NIXOS_CONFIG_DIR" commit -m "Initial NixOS configuration for $hostname"
 
 # Rebuild NixOS with flake
 echo "Rebuilding NixOS..."
