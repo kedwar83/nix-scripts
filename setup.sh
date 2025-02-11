@@ -35,14 +35,14 @@ setup_distrobox() {
     # 2. Create a Debian-based distrobox container (if it doesn't exist).
     if ! distrobox-list --name debian-distro &> /dev/null; then
         echo "Creating Debian distrobox container named 'debian-distro'..."
-        distrobox-create --name debian-distro --image debian:latest
+        distrobox create --name debian-distro --image debian:latest
     else
         echo "Debian distrobox container 'debian-distro' already exists."
     fi
 
     # 3. Run the installation commands inside the container.
     echo "Installing apps inside the container..."
-    distrobox-run --name debian-distro -- bash -c '
+    distrobox enter --name debian-distro -- bash -c '
         apt update &&
         apt install -y virt-manager curl gnupg apt-transport-https &&
         # Install Signal:
