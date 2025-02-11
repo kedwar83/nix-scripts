@@ -42,20 +42,21 @@ setup_distrobox() {
 
     # 3. Run the installation commands inside the container.
     echo "Installing apps inside the container..."
-    distrobox enter --name debian-distro -- bash -c '
-        apt update &&
-        apt install -y virt-manager curl gnupg apt-transport-https &&
-        # Install Signal:
-        wget -O- https://updates.signal.org/desktop/apt/keys.asc | gpg --dearmor > /usr/share/keyrings/signal-desktop-keyring.gpg &&
-        cat /usr/share/keyrings/signal-desktop-keyring.gpg | tee /etc/apt/sources.list.d/signal-xenial.list > /dev/null &&
-        apt update &&
-        apt install -y signal-desktop &&
-        # Install Brave:
-        curl -fsSLo /usr/share/keyrings/brave-browser-archive-keyring.gpg https://brave-browser-apt-release.s3.brave.com/brave-browser-archive-keyring.gpg &&
-        echo "deb [signed-by=/usr/share/keyrings/brave-browser-archive-keyring.gpg] https://brave-browser-apt-release.s3.brave.com/ stable main" | tee /etc/apt/sources.list.d/brave-browser-release.list &&
-        apt update &&
-        apt install -y brave-browser
-    '
+    distrobox enter --name debian-distro --user root -- bash -c '
+  apt update &&
+  apt install -y virt-manager curl gnupg apt-transport-https &&
+  # Install Signal:
+  wget -O- https://updates.signal.org/desktop/apt/keys.asc | gpg --dearmor > /usr/share/keyrings/signal-desktop-keyring.gpg &&
+  cat /usr/share/keyrings/signal-desktop-keyring.gpg | tee /etc/apt/sources.list.d/signal-xenial.list > /dev/null &&
+  apt update &&
+  apt install -y signal-desktop &&
+  # Install Brave:
+  curl -fsSLo /usr/share/keyrings/brave-browser-archive-keyring.gpg https://brave-browser-apt-release.s3.brave.com/brave-browser-archive-keyring.gpg &&
+  echo "deb [signed-by=/usr/share/keyrings/brave-browser-archive-keyring.gpg] https://brave-browser-apt-release.s3.brave.com/ stable main" | tee /etc/apt/sources.list.d/brave-browser-release.list &&
+  apt update &&
+  apt install -y brave-browser
+'
+
 
     # 4. Export the applications so that they appear on the host.
     echo "Exporting Brave and Signal from distrobox to the host..."
